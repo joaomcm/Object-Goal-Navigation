@@ -11,7 +11,7 @@ import habitat
 from envs.utils.fmm_planner import FMMPlanner
 from constants import coco_categories
 import envs.utils.pose as pu
-
+import pdb
 
 class ObjectGoal_Env(habitat.RLEnv):
     """The Object Goal Navigation environment class. The class is responsible
@@ -22,18 +22,24 @@ class ObjectGoal_Env(habitat.RLEnv):
     def __init__(self, args, rank, config_env, dataset):
         self.args = args
         self.rank = rank
-
+        config_env.defrost()
+        # config_env.ENVIRONMENT.ITERATOR_OPTIONS.NUM_EPISODE= 2
+        # config_env.ENVIRONMENT.ITERATOR_OPTIONS.MAX_SCENE_REPEAT_EPISODES = 2
+        config_env.ENVIRONMENT.ITERATOR_OPTIONS.SHUFFLE = True
+        config_env.ENVIRONMENT.ITERATOR_OPTIONS.GROUP_BY_SCENE = False
+        config_env.freeze()
+        print('\n\n\n THIS IS THE CONFIG ENV {}\n\n\n\n\n\n\n'.format(config_env.ENVIRONMENT))
         super().__init__(config_env, dataset)
-
+        
         # Loading dataset info file
         self.split = config_env.DATASET.SPLIT
         self.episodes_dir = config_env.DATASET.EPISODES_DIR.format(
             split=self.split)
-
-        dataset_info_file = self.episodes_dir + \
-            "{split}_info.pbz2".format(split=self.split)
-        with bz2.BZ2File(dataset_info_file, 'rb') as f:
-            self.dataset_info = cPickle.load(f)
+        self.dataset = dataset
+        # dataset_info_file = self.episodes_dir + \
+        #     "{split}_info.pbz2".format(split=self.split)
+        # with bz2.BZ2File(dataset_info_file, 'rb') as f:
+        #     self.dataset_info = cPickle.load(f)
 
         # Specifying action and observation space
         self.action_space = gym.spaces.Discrete(3)
@@ -42,7 +48,10 @@ class ObjectGoal_Env(habitat.RLEnv):
                                                 (3, args.frame_height,
                                                  args.frame_width),
                                                 dtype='uint8')
-
+        print(dir(self))
+        # self.habitat_env.episode_iterator = self.dataset.get_episode_iterator()
+        # self.habitat_env.episode_iterator._forced_scene_switch()
+        # self.episode_iterator = self.habitat_env.episode_iterator
         # Initializations
         self.episode_no = 0
 
@@ -74,83 +83,97 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.info['distance_to_goal'] = None
         self.info['spl'] = None
         self.info['success'] = None
-
+    
+    def get_scene_name(self):
+        self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
+        scene_name = self.scene_path.split("/")[-1].split(".")[0]
+        return scene_name
+        
     def load_new_episode(self):
         """The function loads a fixed episode from the episode dataset. This
         function is used for evaluating a trained model on the val split.
         """
-
-        args = self.args
-        self.scene_path = self.habitat_env.sim.config.SCENE
+        if(self.episode_no != 0):
+            # self.habitat_env.episode_iterator._forced_scene_switch()
+            print('IT REACHES THE FIRST RESET')
+            super().reset()
+            self.habitat_env.task.reset(self.habitat_env.current_episode)
+        # args = self.args
+        self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
         scene_name = self.scene_path.split("/")[-1].split(".")[0]
+        print('this scene is now this : {}'.format(scene_name))
+        # if self.scene_path != self.last_scene_path:
+        #     episodes_file = self.episodes_dir + \
+        #         "content/{}_episodes.json.gz".format(scene_name)
 
-        if self.scene_path != self.last_scene_path:
-            episodes_file = self.episodes_dir + \
-                "content/{}_episodes.json.gz".format(scene_name)
-
-            print("Loading episodes from: {}".format(episodes_file))
-            with gzip.open(episodes_file, 'r') as f:
-                self.eps_data = json.loads(
-                    f.read().decode('utf-8'))["episodes"]
-
-            self.eps_data_idx = 0
-            self.last_scene_path = self.scene_path
+        #     print("Loading episodes from: {}".format(episodes_file))
+        #     with gzip.open(episodes_file, 'r') as f:
+        #         self.eps_data = json.loads(
+        #             f.read().decode('utf-8'))["episodes"]
+        self.eps_data_idx = 0
+        self.last_scene_path = self.scene_path
 
         # Load episode info
-        episode = self.eps_data[self.eps_data_idx]
+        # episode = self.eps_data[self.eps_data_idx]
+        # episode = self.dataset.episodes[self.eps_data_idx]
+        # episode = next(self.episode_iterator)
+        episode = self.habitat_env.current_episode
+        print('\n\nthis is the scene id {} and the episode_id {} and the category is {}\n\n'.format(episode.scene_id,episode.episode_id,episode.object_category))
         self.eps_data_idx += 1
-        self.eps_data_idx = self.eps_data_idx % len(self.eps_data)
-        pos = episode["start_position"]
-        rot = quaternion.from_float_array(episode["start_rotation"])
-
-        goal_name = episode["object_category"]
-        goal_idx = episode["object_id"]
-        floor_idx = episode["floor_id"]
+        self.eps_data_idx = self.eps_data_idx % len(self.dataset.episodes)
+        # pos = episode.start_position
+        # rot = quaternion.from_float_array(episode.start_rotation)
+        pos = self.habitat_env.current_episode.start_position
+        rot = self.habitat_env.current_episode.start_rotation
+        goal_name = self.habitat_env.current_episode.object_category
+        goal_idx = self.dataset.category_to_scene_annotation_category_id[goal_name]
+        # floor_idx = episode["floor_id"]
 
         # Load scene info
-        scene_info = self.dataset_info[scene_name]
-        sem_map = scene_info[floor_idx]['sem_map']
-        map_obj_origin = scene_info[floor_idx]['origin']
+        # scene_info = self.dataset_info[scene_name]
+        # sem_map = scene_info[floor_idx]['sem_map']
+        # map_obj_origin = [0,0,0]
 
-        # Setup ground truth planner
-        object_boundary = args.success_dist
-        map_resolution = args.map_resolution
-        selem = skimage.morphology.disk(2)
-        traversible = skimage.morphology.binary_dilation(
-            sem_map[0], selem) != True
-        traversible = 1 - traversible
-        planner = FMMPlanner(traversible)
-        selem = skimage.morphology.disk(
-            int(object_boundary * 100. / map_resolution))
-        goal_map = skimage.morphology.binary_dilation(
-            sem_map[goal_idx + 1], selem) != True
-        goal_map = 1 - goal_map
-        planner.set_multi_goal(goal_map)
+        # # Setup ground truth planner
+        # object_boundary = args.success_dist
+        # map_resolution = args.map_resolution
+        # selem = skimage.morphology.disk(2)
+        # traversible = skimage.morphology.binary_dilation(
+        #     sem_map[0], selem) != True
+        # traversible = 1 - traversible
+        # planner = FMMPlanner(traversible)
+        # selem = skimage.morphology.disk(
+        #     int(object_boundary * 100. / map_resolution))
+        # goal_map = skimage.morphology.binary_dilation(
+        #     sem_map[goal_idx + 1], selem) != True
+        # goal_map = 1 - goal_map
+        # planner.set_multi_goal(goal_map)
 
         # Get starting loc in GT map coordinates
-        x = -pos[2]
-        y = -pos[0]
-        min_x, min_y = map_obj_origin / 100.0
-        map_loc = int((-y - min_y) * 20.), int((-x - min_x) * 20.)
+        # x = -pos[2]
+        # y = -pos[0]
+        # min_x, min_y = map_obj_origin / 100.0
+        # map_loc = int((-y - min_y) * 20.), int((-x - min_x) * 20.)
 
-        self.gt_planner = planner
-        self.starting_loc = map_loc
-        self.object_boundary = object_boundary
+        # self.gt_planner = planner
+        # self.starting_loc = map_loc
+        # self.object_boundary = object_boundary
         self.goal_idx = goal_idx
         self.goal_name = goal_name
-        self.map_obj_origin = map_obj_origin
+        # self.map_obj_origin = map_obj_origin
 
-        self.starting_distance = self.gt_planner.fmm_dist[self.starting_loc]\
-            / 20.0 + self.object_boundary
+        self.starting_distance = self.habitat_env.current_episode.info['geodesic_distance']/20.0#self.gt_planner.fmm_dist[self.starting_loc]\
+        #    / 20.0 + self.object_boundary
         self.prev_distance = self.starting_distance
         self._env.sim.set_agent_state(pos, rot)
 
         # The following two should match approximately
         # print(starting_loc)
         # print(self.sim_continuous_to_sim_map(self.get_sim_location()))
-
+        # print('WE GET TO THE POINT OF GENERATING THE NEW OBSERVATIONS')
         obs = self._env.sim.get_observations_at(pos, rot)
-
+        print('WE PASS THE POINT OF GETTING NEW OBSERVATIONS')
+        # print(obs)
         return obs
 
     def generate_new_episode(self):
@@ -170,7 +193,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         floor_height = scene_info[floor_idx]['floor_height']
         sem_map = scene_info[floor_idx]['sem_map']
         map_obj_origin = scene_info[floor_idx]['origin']
-
+        # map_obj_origin = 
         cat_counts = sem_map.sum(2).sum(1)
         possible_cats = list(np.arange(6))
 
@@ -235,7 +258,7 @@ class ObjectGoal_Env(habitat.RLEnv):
             if abs(pos[1] - floor_height) < args.floor_thr / 100.0 and \
                     possible_starting_locs[map_loc[0], map_loc[1]] == 1:
                 loc_found = True
-
+            
         agent_state = self._env.sim.get_agent_state(0)
         rotation = agent_state.rotation
         rvec = quaternion.as_rotation_vector(rotation)
@@ -300,7 +323,6 @@ class ObjectGoal_Env(habitat.RLEnv):
 
     def reset(self):
         """Resets the environment to a new episode.
-
         Returns:
             obs (ndarray): RGBD observations (4 x H x W)
             info (dict): contains timestep, pose, goal category and
@@ -308,28 +330,29 @@ class ObjectGoal_Env(habitat.RLEnv):
         """
         args = self.args
         new_scene = self.episode_no % args.num_train_episodes == 0
-
-        self.episode_no += 1
-
+        if self.episode_no == 0:
+            obs = super().reset()
         # Initializations
         self.timestep = 0
         self.stopped = False
         self.path_length = 1e-5
         self.trajectory_states = []
+        # if new_scene:
+        #     obs = super().reset()
+        #     self.scene_name = self.habitat_env.sim.config.sim_cfg.scene_id
+        #     print("Changing scene: {}/{}".format(self.rank, self.scene_name))
 
-        if new_scene:
-            obs = super().reset()
-            self.scene_name = self.habitat_env.sim.config.SCENE
-            print("Changing scene: {}/{}".format(self.rank, self.scene_name))
-
-        self.scene_path = self.habitat_env.sim.config.SCENE
-
-        if self.split == "val":
-            obs = self.load_new_episode()
-        else:
-            obs = self.generate_new_episode()
+        self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
+        print('\n\n\n\n\n\n THIS IS THE REGISTERED SCENE NAME {}'.format(self.scene_name))
+        # if self.split == "val":
+        #     obs = self.load_new_episode()
+        # else:
+        #     obs = self.generate_new_episode()
+        obs = self.load_new_episode()
+        self.episode_no += 1
 
         rgb = obs['rgb'].astype(np.uint8)
+
         depth = obs['depth']
         state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
         self.last_sim_location = self.get_sim_location()
@@ -339,17 +362,15 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.info['sensor_pose'] = [0., 0., 0.]
         self.info['goal_cat_id'] = self.goal_idx
         self.info['goal_name'] = self.goal_name
-
+        # print('IT RETURNS THE STATE AND THE INFO')
         return state, self.info
 
     def step(self, action):
         """Function to take an action in the environment.
-
         Args:
             action (dict):
                 dict with following keys:
                     'action' (int): 0: stop, 1: forward, 2: left, 3: right
-
         Returns:
             obs (ndarray): RGBD observations (4 x H x W)
             reward (float): amount of reward returned after previous action
@@ -391,9 +412,9 @@ class ObjectGoal_Env(habitat.RLEnv):
         return (0., 1.0)
 
     def get_reward(self, observations):
-        curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
-        self.curr_distance = self.gt_planner.fmm_dist[curr_loc[0],
-                                                      curr_loc[1]] / 20.0
+        # curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
+        self.curr_distance = self.habitat_env.get_metrics()['distance_to_goal']/20.0#self.gt_planner.fmm_dist[curr_loc[0],
+                              #                        curr_loc[1]] / 20.0
 
         reward = (self.prev_distance - self.curr_distance) * \
             self.args.reward_coeff
@@ -403,7 +424,6 @@ class ObjectGoal_Env(habitat.RLEnv):
 
     def get_metrics(self):
         """This function computes evaluation metrics for the Object Goal task
-
         Returns:
             spl (float): Success weighted by Path Length
                         (See https://arxiv.org/pdf/1807.06757.pdf)
@@ -412,13 +432,19 @@ class ObjectGoal_Env(habitat.RLEnv):
                         from the success threshold boundary in meters.
                         (See https://arxiv.org/pdf/2007.00643.pdf)
         """
-        curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
-        dist = self.gt_planner.fmm_dist[curr_loc[0], curr_loc[1]] / 20.0
-        if dist == 0.0:
-            success = 1
-        else:
-            success = 0
-        spl = min(success * self.starting_distance / self.path_length, 1)
+        # curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
+        # dist = self.gt_planner.fmm_dist[curr_loc[0], curr_loc[1]] / 20.0
+        # if dist == 0.0:
+        #     success = 1
+        # else:
+        #     success = 0
+        # spl = min(success * self.starting_distance / self.path_length, 1)
+        metrics = self.habitat_env.get_metrics()
+        print(metrics)
+        spl = metrics['softspl']
+        # success = int(metrics['success'])
+        dist = metrics['distance_to_goal']
+        success = int(dist < 1.0)
         return spl, success, dist
 
     def get_done(self, observations):

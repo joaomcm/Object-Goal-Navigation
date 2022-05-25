@@ -37,11 +37,11 @@ scenes["val"] = [
 
 coco_categories = {
     "chair": 0,
-    "couch": 1,
-    "potted plant": 2,
-    "bed": 3,
-    "toilet": 4,
-    "tv": 5,
+    "couch": 5,
+    "plant": 2,
+    "bed": 1,
+    "toilet": 3,
+    "tv_monitor":4,
     "dining-table": 6,
     "oven": 7,
     "sink": 8,
@@ -52,14 +52,33 @@ coco_categories = {
     "cup": 13,
     "bottle": 14
 }
+# Coco to Gibson
+# coco_categories_mapping = {
+#     56: 0,  # chair
+#     57: 1,  # couch
+#     58: 2,  # potted plant
+#     59: 3,  # bed
+#     61: 4,  # toilet
+#     62: 5,  # tv
+#     60: 6,  # dining-table
+#     69: 7,  # oven
+#     71: 8,  # sink
+#     72: 9,  # refrigerator
+#     73: 10,  # book
+#     74: 11,  # clock
+#     75: 12,  # vase
+#     41: 13,  # cup
+#     39: 14,  # bottle
+# }
 
+#coco to hmd_mp3d
 coco_categories_mapping = {
     56: 0,  # chair
-    57: 1,  # couch
+    57: 5,  # couch
     58: 2,  # potted plant
-    59: 3,  # bed
-    61: 4,  # toilet
-    62: 5,  # tv
+    59: 1,  # bed
+    61: 3,  # toilet
+    62: 4,  # tv
     60: 6,  # dining-table
     69: 7,  # oven
     71: 8,  # sink

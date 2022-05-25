@@ -15,7 +15,7 @@ from detectron2.modeling import build_model
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.utils.visualizer import ColorMode, Visualizer
 import detectron2.data.transforms as T
-
+import pickle
 from constants import coco_categories_mapping
 
 
@@ -24,6 +24,7 @@ class SemanticPredMaskRCNN():
     def __init__(self, args):
         self.segmentation_model = ImageSegmentation(args)
         self.args = args
+        pickle.dump(args,open('./seg_args.pkl','wb'))
 
     def get_prediction(self, img):
         args = self.args
@@ -37,11 +38,13 @@ class SemanticPredMaskRCNN():
             img = vis_output.get_image()
 
         semantic_input = np.zeros((img.shape[0], img.shape[1], 15 + 1))
-
+        # print(seg_predictions)
         for j, class_idx in enumerate(
                 seg_predictions[0]['instances'].pred_classes.cpu().numpy()):
             if class_idx in list(coco_categories_mapping.keys()):
                 idx = coco_categories_mapping[class_idx]
+                # if(idx == 0):
+                    # print('\n\n\nTHERES A BUG BUG BUG BUG\n\n\n')
                 obj_mask = seg_predictions[0]['instances'].pred_masks[j] * 1.
                 semantic_input[:, :, idx] += obj_mask.cpu().numpy()
 

@@ -13,13 +13,17 @@ from utils.storage import GlobalRolloutStorage
 from envs import make_vec_envs
 from arguments import get_args
 import algo
+import pickle
+import pdb
+import faulthandler
+import rospy
+faulthandler.enable()
 
 os.environ["OMP_NUM_THREADS"] = "1"
-
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
 
 def main():
     args = get_args()
-
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
@@ -43,7 +47,8 @@ def main():
     logging.info(args)
 
     # Logging and loss variables
-    num_scenes = args.num_processes
+    num_scenes = int(args.num_processes)
+    print(type(num_scenes))
     num_episodes = int(args.num_eval_episodes)
     device = args.device = torch.device("cuda:0" if args.cuda else "cpu")
 
@@ -225,6 +230,7 @@ def main():
     sem_map_module = Semantic_Mapping(args).to(device)
     sem_map_module.eval()
 
+    # print('Is the mapping module on cuda? {}'.format(next(sem_map_module.parameters()).is_cuda()))
     # Global policy
     g_policy = RL_Policy(g_observation_space.shape, g_action_space,
                          model_type=1,
@@ -262,9 +268,11 @@ def main():
         [infos[env_idx]['sensor_pose'] for env_idx in range(num_scenes)])
     ).float().to(device)
 
+    # print('\n\n\n\n this is the device being used: {} \n\n\n\n\n'.format(device))
+
     _, local_map, _, local_pose = \
         sem_map_module(obs, poses, local_map, local_pose)
-
+    # print('the local map is cuda= {}'.format(local_map.is_cuda))
     # Compute Global policy input
     locs = local_pose.cpu().numpy()
     global_input = torch.zeros(num_scenes, ngc, local_w, local_h)
@@ -282,6 +290,8 @@ def main():
     global_input[:, 4:8, :, :] = nn.MaxPool2d(args.global_downscaling)(
         full_map[:, 0:4, :, :])
     global_input[:, 8:, :, :] = local_map[:, 4:, :, :].detach()
+    # print('\\n\n\n\n\n\n\n\n\n\n',num_scenes,type(num_scenes),'\n\\n\n\n\n\n\n\n\nn\n\n')
+    # pdb.set_trace()
     goal_cat_id = torch.from_numpy(np.asarray(
         [infos[env_idx]['goal_cat_id'] for env_idx
          in range(num_scenes)]))
@@ -304,6 +314,7 @@ def main():
         )
 
     cpu_actions = nn.Sigmoid()(g_action).cpu().numpy()
+    # print(cpu_actions)
     global_goals = [[int(action[0] * local_w), int(action[1] * local_h)]
                     for action in cpu_actions]
     global_goals = [[min(x, int(local_w - 1)), min(y, int(local_h - 1))]
@@ -327,7 +338,7 @@ def main():
             local_map[e, -1, :, :] = 1e-5
             p_input['sem_map_pred'] = local_map[e, 4:, :, :
                                                 ].argmax(0).cpu().numpy()
-
+    # print('\n\n\n planner inputs : {} \n\n'.format(planner_inputs))
     obs, _, done, infos = envs.plan_act_and_preprocess(planner_inputs)
 
     start = time.time()
@@ -336,7 +347,7 @@ def main():
     torch.set_grad_enabled(False)
     spl_per_category = defaultdict(list)
     success_per_category = defaultdict(list)
-
+    # pdb.set_trace()
     for step in range(args.num_training_frames // args.num_processes + 1):
         if finished.sum() == args.num_processes:
             break
@@ -524,8 +535,12 @@ def main():
                 local_map[e, -1, :, :] = 1e-5
                 p_input['sem_map_pred'] = local_map[e, 4:, :,
                                                     :].argmax(0).cpu().numpy()
+        # print('\n\n\n planner inputs : {} \n\n'.format(planner_inputs))
 
         obs, _, done, infos = envs.plan_act_and_preprocess(planner_inputs)
+        # pdb.set_trace()
+        # print('\n\n\n obs:  {} \n\n'.format(obs))
+
         # ------------------------------------------------------------------
 
         # ------------------------------------------------------------------
@@ -692,4 +707,6 @@ def main():
 
 
 if __name__ == "__main__":
+    node = rospy.init_node('making_shit_work',anonymous= True)
+
     main()

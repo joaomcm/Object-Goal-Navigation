@@ -11,17 +11,17 @@ def get_args():
                         help='random seed (default: 1)')
     parser.add_argument('--auto_gpu_config', type=int, default=1)
     parser.add_argument('--total_num_scenes', type=str, default="auto")
-    parser.add_argument('-n', '--num_processes', type=int, default=5,
+    parser.add_argument('-n', '--num_processes', type=int, default=1,
                         help="""how many training processes to use (default:5)
                                 Overridden when auto_gpu_config=1
                                 and training on gpus""")
-    parser.add_argument('--num_processes_per_gpu', type=int, default=6)
+    parser.add_argument('--num_processes_per_gpu', type=int, default=1)
     parser.add_argument('--num_processes_on_first_gpu', type=int, default=1)
     parser.add_argument('--eval', type=int, default=0,
                         help='0: Train, 1: Evaluate (default: 0)')
     parser.add_argument('--num_training_frames', type=int, default=10000000,
                         help='total number of training frames')
-    parser.add_argument('--num_eval_episodes', type=int, default=200,
+    parser.add_argument('--num_eval_episodes', type=int, default=10000,
                         help="number of test episodes per scene")
     parser.add_argument('--num_train_episodes', type=int, default=10000,
                         help="""number of train episodes per scene
@@ -63,14 +63,14 @@ def get_args():
                         help='Frame width (default:640)')
     parser.add_argument('-efh', '--env_frame_height', type=int, default=480,
                         help='Frame height (default:480)')
-    parser.add_argument('-fw', '--frame_width', type=int, default=160,
+    parser.add_argument('-fw', '--frame_width', type=int, default=640,
                         help='Frame width (default:160)')
-    parser.add_argument('-fh', '--frame_height', type=int, default=120,
+    parser.add_argument('-fh', '--frame_height', type=int, default=480,
                         help='Frame height (default:120)')
     parser.add_argument('-el', '--max_episode_length', type=int, default=500,
                         help="""Maximum episode length""")
     parser.add_argument("--task_config", type=str,
-                        default="tasks/objectnav_gibson.yaml",
+                        default="/tasks/challenge_objectnav2022.local.rgbd.yaml",
                         help="path to config yaml containing task information")
     parser.add_argument("--split", type=str, default="train",
                         help="dataset split (train | val | val_mini) ")
@@ -135,7 +135,7 @@ def get_args():
     parser.add_argument('--intrinsic_rew_coeff', type=float, default=0.02,
                         help="intrinsic exploration reward coefficient")
     parser.add_argument('--num_sem_categories', type=float, default=16)
-    parser.add_argument('--sem_pred_prob_thr', type=float, default=0.9,
+    parser.add_argument('--sem_pred_prob_thr', type=float, default=0.7,
                         help="Semantic prediction confidence threshold")
 
     # Mapping
@@ -144,10 +144,10 @@ def get_args():
     parser.add_argument('--map_resolution', type=int, default=5)
     parser.add_argument('--du_scale', type=int, default=1)
     parser.add_argument('--map_size_cm', type=int, default=2400)
-    parser.add_argument('--cat_pred_threshold', type=float, default=5.0)
+    parser.add_argument('--cat_pred_threshold', type=float, default=10.0)
     parser.add_argument('--map_pred_threshold', type=float, default=1.0)
     parser.add_argument('--exp_pred_threshold', type=float, default=1.0)
-    parser.add_argument('--collision_threshold', type=float, default=0.20)
+    parser.add_argument('--collision_threshold', type=float, default=0.1)
 
     # parse arguments
     args = parser.parse_args()
@@ -157,6 +157,7 @@ def get_args():
     if args.cuda:
         if args.auto_gpu_config:
             num_gpus = torch.cuda.device_count()
+            print('there are this many gpus: {}'.format(num_gpus))
             if args.total_num_scenes != "auto":
                 args.total_num_scenes = int(args.total_num_scenes)
             elif "objectnav_gibson" in args.task_config and \
@@ -193,6 +194,7 @@ def get_args():
             if args.eval:
                 max_threads = num_processes_per_gpu * (num_gpus - 1) \
                     + num_processes_on_first_gpu
+                print('\n\n\n max_threads is = {}'.format(max_threads))
                 assert max_threads >= args.total_num_scenes, \
                     """Insufficient GPU memory for evaluation"""
 
@@ -211,7 +213,7 @@ def get_args():
                     num_threads - args.num_processes_per_gpu * (num_gpus - 1))
                 args.num_processes = num_threads
 
-            args.sim_gpu_id = 1
+            args.sim_gpu_id = 0
 
             print("Auto GPU config:")
             print("Number of processes: {}".format(args.num_processes))

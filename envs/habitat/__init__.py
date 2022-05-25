@@ -10,15 +10,20 @@ from habitat import Config, Env, RLEnv, VectorEnv, make_dataset
 from agents.sem_exp import Sem_Exp_Env_Agent
 from .objectgoal_env import ObjectGoal_Env
 
-from .utils.vector_env import VectorEnv
-
+from .utils.vector_env import ThreadedVectorEnv as VectorEnv
+import pdb
 
 def make_env_fn(args, config_env, rank):
-    dataset = make_dataset(config_env.DATASET.TYPE, config=config_env.DATASET)
-    config_env.defrost()
-    config_env.SIMULATOR.SCENE = dataset.episodes[0].scene_id
-    config_env.freeze()
+    # print('\n\n\n\n WTF IS GOING ON WITH THIS DATASET \n\n {} \n\n {} \n\n rank =  {}'.format(config_env.DATASET,config_env.DATASET.TYPE,rank))
+    # print(config_env)
+    
+    # print(config_env.DATASET)
+    ds = make_dataset(config_env.DATASET.TYPE, config=config_env.DATASET)
+    dataset = ds.get_splits(num_splits = 1,collate_scene_ids = False)[0]
 
+    # print(config_env)
+    # print(dataset.episodes[0])
+    # print('\n\n\ngets here?\n\n\n')
     if args.agent == "sem_exp":
         env = Sem_Exp_Env_Agent(args=args, rank=rank,
                                 config_env=config_env,
@@ -95,6 +100,7 @@ def construct_envs(args):
             gpu_id = int((i - args.num_processes_on_first_gpu)
                          // args.num_processes_per_gpu) + args.sim_gpu_id
         gpu_id = min(torch.cuda.device_count() - 1, gpu_id)
+        print('\n\n the GPU ID is {}\n\n'.format(gpu_id))
         config_env.SIMULATOR.HABITAT_SIM_V0.GPU_DEVICE_ID = gpu_id
 
         agent_sensors = []
@@ -106,7 +112,7 @@ def construct_envs(args):
 
         # Reseting episodes manually, setting high max episode length in sim
         config_env.ENVIRONMENT.MAX_EPISODE_STEPS = 10000000
-        config_env.ENVIRONMENT.ITERATOR_OPTIONS.SHUFFLE = False
+        config_env.ENVIRONMENT.ITERATOR_OPTIONS.SHUFFLE = True
 
         config_env.SIMULATOR.RGB_SENSOR.WIDTH = args.env_frame_width
         config_env.SIMULATOR.RGB_SENSOR.HEIGHT = args.env_frame_height
@@ -123,8 +129,7 @@ def construct_envs(args):
         # config_env.SIMULATOR.SEMANTIC_SENSOR.WIDTH = args.env_frame_width
         # config_env.SIMULATOR.SEMANTIC_SENSOR.HEIGHT = args.env_frame_height
         # config_env.SIMULATOR.SEMANTIC_SENSOR.HFOV = args.hfov
-        # config_env.SIMULATOR.SEMANTIC_SENSOR.POSITION = \
-        #     [0, args.camera_height, 0]
+        # config_env.SIMULATOR.SEMANTIC_SENSOR.POSITION = [0, args.camera_height, 0]
 
         config_env.SIMULATOR.TURN_ANGLE = args.turn_angle
         config_env.DATASET.SPLIT = args.split
@@ -133,10 +138,15 @@ def construct_envs(args):
         config_env.DATASET.EPISODES_DIR = \
             config_env.DATASET.EPISODES_DIR.replace("v1", args.version)
 
+        config_env.SIMULATOR.SCENE_DATASET = "/home/motion/habitat-challenge/habitat-challenge-data/data/scene_datasets/hm3d/hm3d_annotated_basis_actual.scene_dataset_config.json"
+        print(config_env.DATASET)
+        # config_env.SIMULATOR.SCENE_DATASET = dataset
         config_env.freeze()
+
         env_configs.append(config_env)
 
         args_list.append(args)
+    # pdb.set_trace()
 
     envs = VectorEnv(
         make_env_fn=make_env_fn,

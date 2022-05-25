@@ -3,7 +3,7 @@ import numpy as np
 import skfmm
 import skimage
 from numpy import ma
-
+import pdb
 
 def get_mask(sx, sy, scale, step_size):
     size = int(step_size // scale) * 2 + 1
@@ -37,7 +37,7 @@ def get_dist(sx, sy, scale, step_size):
 
 
 class FMMPlanner():
-    def __init__(self, traversible, scale=1, step_size=5):
+    def __init__(self, traversible, scale=1, step_size=5,prev_state = np.array([0,0,0])):
         self.scale = scale
         self.step_size = step_size
         if scale != 1.:
@@ -51,6 +51,7 @@ class FMMPlanner():
 
         self.du = int(self.step_size / (self.scale * 1.))
         self.fmm_dist = None
+        self.previous_state = prev_state
 
     def set_goal(self, goal, auto_improve=False):
         traversible_ma = ma.masked_values(self.traversible * 1, 0)
@@ -74,9 +75,10 @@ class FMMPlanner():
         self.fmm_dist = dd
         return
 
-    def get_short_term_goal(self, state):
+    def get_short_term_goal(self, state,curr_loc):
         scale = self.scale * 1.
         state = [x / scale for x in state]
+        # print('this is what the state looks like : {}'.format(state))
         dx, dy = state[0] - int(state[0]), state[1] - int(state[1])
         mask = get_mask(dx, dy, scale, self.step_size)
         dist_mask = get_dist(dx, dy, scale, self.step_size)
@@ -103,8 +105,17 @@ class FMMPlanner():
         subset -= subset[self.du, self.du]
         ratio1 = subset / dist_mask
         subset[ratio1 < -1.5] = 1
-
-        (stg_x, stg_y) = np.unravel_index(np.argmin(subset), subset.shape)
+        # print('previous state = {},state = {}'.format(self.previous_state,curr_loc))
+        if(not np.all(curr_loc==self.previous_state)):
+            (stg_x, stg_y) = np.unravel_index(np.argmin(subset), subset.shape)
+            self.previous_state = curr_loc
+        else:
+            argsorted = np.argsort(subset.flatten())
+            chosen = np.random.choice(argsorted)
+            # print(np.sort(subset.flatten())[:30])
+            (stg_x, stg_y) = np.unravel_index(chosen, subset.shape)
+            self.previous_state = curr_loc
+            # pdb.set_trace()
 
         if subset[stg_x, stg_y] > -0.0001:
             replan = True

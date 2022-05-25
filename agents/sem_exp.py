@@ -12,6 +12,15 @@ from agents.utils.semantic_prediction import SemanticPredMaskRCNN
 from constants import color_palette
 import envs.utils.pose as pu
 import agents.utils.visualization as vu
+import pickle
+from agents.semantic_gt_loader import Semantic_env
+from glob import glob
+import time 
+
+
+import rospy
+from std_msgs.msg import String
+
 
 
 class Sem_Exp_Env_Agent(ObjectGoal_Env):
@@ -24,7 +33,27 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
 
         self.args = args
         super().__init__(args, rank, config_env, dataset)
+        self.extra_fluff = False
+        self.scan_gt_image = False
+        self.use_ros = False
+        self.thold = args.sem_pred_prob_thr
+        self.previous_image = np.random.rand(480,640,3)
+        #extra fluff 
+        if(self.use_ros):
+            self.state_publisher = rospy.Publisher('/env_state_and_others',String,queue_size = 1000)
+        if self.extra_fluff:
+            self.se = Semantic_env()
+            self.prev_scene_name = self.get_scene_name()
+ 
+        if(not os.path.exists('/home/motion/data/semantic_evaluation_sem_exp/{}'.format(self.thold))):
+            os.mkdir('/home/motion/data/semantic_evaluation_sem_exp/{}'.format(self.thold))
+            for cat in ['rgb','gt','pred','depth','map']:
+                os.mkdir('/home/motion/data/semantic_evaluation_sem_exp/{}/{}'.format(self.thold,cat))
+        self.imgs_dir = '/home/motion/data/semantic_evaluation_sem_exp/{}/{}/{}.{}'
 
+        images = glob(self.imgs_dir.format(self.thold,'gt','*','jpg'))
+        self.imcounter = len(images)
+        #get the scene =
         # initialize transform for RGB observations
         self.res = transforms.Compose(
             [transforms.ToPILImage(),
@@ -34,6 +63,7 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
         # initialize semantic segmentation prediction model
         if args.sem_gpu_id == -1:
             args.sem_gpu_id = config_env.SIMULATOR.HABITAT_SIM_V0.GPU_DEVICE_ID
+        pickle.dump(args,open('./args_example.pkl','wb'))
 
         self.sem_pred = SemanticPredMaskRCNN(args)
 
@@ -50,12 +80,34 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
         self.last_loc = None
         self.last_action = None
         self.count_forward_actions = None
-
+        self.prev_state = np.array([0,0])
         if args.visualize or args.print_images:
             self.legend = cv2.imread('docs/legend.png')
             self.vis_image = None
             self.rgb_vis = None
 
+
+    def restart_semantic_env(self):
+        scene_name = self.get_scene_name()
+        if(scene_name != self.prev_scene_name):
+            self.se.reconfigure_sim(scene_name)
+            self.prev_scene_name = scene_name
+        # time.sleep(2)
+
+    def get_gt_segmentation(self):
+        state = self.habitat_env.sim.get_agent(0).state
+        return self.se.get_observation_at(state)
+
+    def produce_gt_segmentation(self):
+        if(self.use_ros):
+            pos = self.habitat_env.sim.get_agent(0).state.position
+            rotation = self.habitat_env.sim.get_agent(0).state.rotation.components
+            scene_name = self.get_scene_name()
+            msg = String()
+            msg.data = '{}|{}|{}|{}|{}'.format(pos.tolist(),rotation.tolist(),scene_name,self.imcounter,self.thold)
+            self.state_publisher.publish(msg)
+        else:
+            pass
     def reset(self):
         args = self.args
 
@@ -78,6 +130,9 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
 
         if args.visualize or args.print_images:
             self.vis_image = vu.init_vis_image(self.goal_name, self.legend)
+        if(self.extra_fluff):
+            print('TRYING TO RESTART THE SEMANTIC ENV')
+            self.restart_semantic_env()
 
         return obs, info
 
@@ -111,7 +166,9 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
         # Reset reward if new long-term goal
         if planner_inputs["new_goal"]:
             self.info["g_reward"] = 0
-
+        # map_to_save = planner_inputs['map_pred']
+        # if(self.imcounter%10 == 9):
+        #     cv2.imwrite(self.imgs_dir.format(self.thold,'map',self.imcounter,'png'),map_to_save)
         action = self._plan(planner_inputs)
 
         if self.args.visualize or self.args.print_images:
@@ -246,6 +303,7 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
                 action = 2  # Left
             else:
                 action = 1  # Forward
+            # print('chosen action = {},stg = {},current_pose = {}'.format(action,stg,start))
 
         return action
 
@@ -276,7 +334,7 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
         traversible = add_boundary(traversible)
         goal = add_boundary(goal, value=0)
 
-        planner = FMMPlanner(traversible)
+        planner = FMMPlanner(traversible,prev_state = self.last_loc)
         selem = skimage.morphology.disk(10)
         goal = skimage.morphology.binary_dilation(
             goal, selem) != True
@@ -284,7 +342,9 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
         planner.set_multi_goal(goal)
 
         state = [start[0] - x1 + 1, start[1] - y1 + 1]
-        stg_x, stg_y, _, stop = planner.get_short_term_goal(state)
+        
+        stg_x, stg_y, _, stop = planner.get_short_term_goal(state,self.curr_loc)
+        self.prev_state = state
 
         stg_x, stg_y = stg_x + x1 - 1, stg_y + y1 - 1
 
@@ -298,8 +358,37 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
 
         sem_seg_pred = self._get_sem_pred(
             rgb.astype(np.uint8), use_seg=use_seg)
-        depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
+        # print(sem_seg_pred[:,:,0],sem_seg_pred.shape)
+        if self.extra_fluff and self.scan_gt_image:
+            sem_seg_gt = self.get_gt_segmentation()
+            to_write = np.zeros((480,640))
+            to_write[:,:] = 255
+            detected = np.where(sem_seg_pred == 1.0)
+            to_write[detected[0],detected[1]] = detected[2]
+            cv2.imwrite(self.imgs_dir.format(self.thold,'gt',self.imcounter,'png'),sem_seg_gt.astype(np.uint8))
+            cv2.imwrite(self.imgs_dir.format(self.thold,'pred',self.imcounter,'png'),to_write.astype(np.uint8))
+            cv2.imwrite(self.imgs_dir.format(self.thold,'rgb',self.imcounter,'jpeg'),rgb.astype(np.uint8))
+        if(self.use_ros):
+            if(not np.all(rgb.astype(np.uint8) == self.previous_image)):
+                self.produce_gt_segmentation()    
+                to_write = np.zeros((480,640))
+                to_write[:,:] = 255
+                detected = np.where(sem_seg_pred == 1.0)
+                to_write[detected[0],detected[1]] = detected[2]        
+                res = cv2.imwrite(self.imgs_dir.format(self.thold,'pred',self.imcounter,'png'),to_write.astype(np.uint8))
+                # print('WROTE THE IMAGE = {}'.format(res))
+                cv2.imwrite(self.imgs_dir.format(self.thold,'rgb',self.imcounter,'jpeg'),rgb.astype(np.uint8))
+                cv2.imwrite(self.imgs_dir.format(self.thold,'depth',self.imcounter,'png'),depth)
+                self.imcounter +=1
+            self.previous_image = rgb.astype(np.uint8)
 
+
+        # cv2.imshow('prediction',sem_seg_pred)
+        # cv2.imshow('gt_segmentation',sem_seg_gt)
+        # cv2.waitKey(1)       
+        print('before => depth_min = {} | depth_max = {}'.format(depth.min(),depth.max())) 
+        depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
+        print('before => depth_min = {} | depth_max = {}'.format(depth.max(),depth.min()))
         ds = args.env_frame_width // args.frame_width  # Downscaling factor
         if ds != 1:
             rgb = np.asarray(self.res(rgb.astype(np.uint8)))
@@ -314,7 +403,7 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
 
     def _preprocess_depth(self, depth, min_d, max_d):
         depth = depth[:, :, 0] * 1
-
+        # print('\n\n PREPROCESSING DEPTH!!! \n\n\n\n')
         for i in range(depth.shape[1]):
             depth[:, i][depth[:, i] == 0.] = depth[:, i].max()
 
@@ -322,7 +411,7 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
         depth[mask2] = 0.
 
         mask1 = depth == 0
-        depth[mask1] = 100.0
+        depth[mask1] = np.nan
         depth = min_d * 100.0 + depth * max_d * 100.0
         return depth
 
@@ -333,6 +422,7 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
         else:
             semantic_pred = np.zeros((rgb.shape[0], rgb.shape[1], 16))
             self.rgb_vis = rgb[:, :, ::-1]
+        # print(semantic_pred,semantic_pred.shape)
         return semantic_pred
 
     def _visualize(self, inputs):
