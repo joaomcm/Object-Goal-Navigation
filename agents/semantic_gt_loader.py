@@ -28,6 +28,8 @@ class Semantic_env:
         self.path_to_hm3d = path_to_hm3d
         self.q = queue.Queue()
         self.started = False
+        self.names_to_classes = {'chair':0,'couch':5,'plant':2,'bed':1,'toilet':3,'tv':4,'table':6,'kitchen table':6,'oven':7,'sink':8,'refrigerator':9,'book':10,'clock':11,'vase':12,'flower vase':12,'cup':13,'bottle':14,'soap bottle':14}
+
         self.create_scene_at()
         self.imgs_dir = '/home/motion/data/semantic_evaluation_sem_exp/{}/{}/{}.{}'
     def create_scene_at(self,scene_id = "vLpv2VX547B"):
@@ -38,7 +40,7 @@ class Semantic_env:
             gc.collect()
         self.scene_id = scene_id
         backend_cfg = habitat_sim.SimulatorConfiguration()
-        backend_cfg.scene_id = scene_id#f"{path_to_hm3d}/minival/00800-TEEsavR23oF/TEEsavR23oF.basis.glb"
+        backend_cfg.scene_id = scene_id #f"{path_to_hm3d}/minival/00800-TEEsavR23oF/TEEsavR23oF.basis.glb"
         backend_cfg.scene_dataset_config_file = f"{self.path_to_hm3d}/hm3d_annotated_basis_actual.scene_dataset_config.json"
         # print('\n\n\n\n\n\n',dir(backend_cfg),'\n\n\n\n\n\n\n')
         # pdb.set_trace()
@@ -86,15 +88,26 @@ class Semantic_env:
         self.index_dict,self.category_to_index = self.create_index_dict(self.scene)
         self.colors = self.create_random_colors()
 
+        
+
         print("# objects: {}".format(len(self.sim.semantic_scene.objects)))
         self.started = True
 
     def create_index_dict(self,scene):
         index_dict={}
         category_to_index = {}
+        # pdb.set_trace()
+        dct = self.names_to_classes
+        test_dict = {}
         for obj in scene.objects:
             category_to_index.update({obj.category.name():obj.category.index()})
-            index_dict.update({obj.semantic_id:obj.category.index()})
+            index_dict.update({obj.semantic_id:dct.get(obj.category.name().lower(),255)})
+        for category in scene.categories:
+            test_dict.update({category.name():category.index()})
+            # print('semantic id = {} | category index = {} | category name = {}'.format(obj.semantic_id,obj.category.index(),obj.category.name()))
+        # print('category to index: {} \n | \n categories : {}'.format(category_to_index,test_dict))
+
+        # print index_dict
         return index_dict,category_to_index
 
     def listen(self):
@@ -136,15 +149,15 @@ class Semantic_env:
 
 
     def map_class(self,idx):
-        return self.index_dict.get(idx,0)
+        return self.index_dict.get(idx,255)
 
 
     def map_instance_to_class(self,idxs):
         return np.vectorize(self.map_class)(idxs)
 
-    def create_random_colors(self,CLASSES = 255*[0]):
+    def create_random_colors(self,CLASSES = 256*[0]):
         np.random.seed(42)
-        COLORS = np.random.randint(0, 255, size=(len(CLASSES) - 1, 3),dtype="uint8")
+        COLORS = np.random.randint(0, 256, size=(len(CLASSES) - 1, 3),dtype="uint8")
         COLORS = np.vstack([[0, 0, 0], COLORS]).astype("uint8")
         return COLORS
 
@@ -183,33 +196,35 @@ class Semantic_env:
 
 
             if(keyboard_input in [ord('a'),ord('w'),ord('d')]):
-                try:
+                # try:
 
-                    observations = self.sim.step(action)
-                    semantic = self.map_instance_to_class(observations['semantic_sensor'])
-                    semantic = semantic.astype(np.uint8)
-                    semantic_colored = self.colors[semantic]
+                observations = self.sim.step(action)
+                semantic = self.map_instance_to_class(observations['semantic_sensor'])
+                # print(np.unique([observations['semantic_sensor']]))
 
-                    # theta = observations['compass'][0]
-                    # x,y = observations['gps']
-                    # rotation_matrix = tf.transformations.rotation_matrix(theta,(0,0,1))
-                    states = self.sim.get_agent(0).state
-                    position = states.sensor_states['color_sensor'].position 
-                    orientation = states.sensor_states['color_sensor'].rotation.components
-                    orientation = orientation/np.linalg.norm(orientation)
+                semantic = semantic.astype(np.uint8)
+                semantic_colored = self.colors[semantic]
 
-                    # compass.append(theta)
-                    # gps.append(observations['gps'])
-                    # x,y = observations['gps']
-                    # x = x + 0.88*np.sin(theta)
-                    # y = y + 0.88*np.cos(theta)
-                    # print(observations['gps'])
-                    cv2.imshow('color image', cv2.cvtColor(observations['color_sensor'][:,:,:3], cv2.COLOR_RGB2BGR))
-                    cv2.imshow('depth image',(observations['depth_sensor']*255/5).astype(np.uint8))
-                    cv2.imshow('semantic image',semantic_colored)
-                except Exception as e:
+                # theta = observations['compass'][0]
+                # x,y = observations['gps']
+                # rotation_matrix = tf.transformations.rotation_matrix(theta,(0,0,1))
+                states = self.sim.get_agent(0).state
+                position = states.sensor_states['color_sensor'].position 
+                orientation = states.sensor_states['color_sensor'].rotation.components
+                orientation = orientation/np.linalg.norm(orientation)
+
+                # compass.append(theta)
+                # gps.append(observations['gps'])
+                # x,y = observations['gps']
+                # x = x + 0.88*np.sin(theta)
+                # y = y + 0.88*np.cos(theta)
+                # print(observations['gps'])
+                cv2.imshow('color image', cv2.cvtColor(observations['color_sensor'][:,:,:3], cv2.COLOR_RGB2BGR))
+                cv2.imshow('depth image',(observations['depth_sensor']*255/5).astype(np.uint8))
+                cv2.imshow('semantic image',semantic_colored)
+                # except Exception as e:
             
-                    break
+                #     break
         
     def get_observation_at(self,state):
         self.sim.agents[0].set_state(state)
@@ -266,7 +281,7 @@ if __name__ == '__main__':
 
 
     #     sim.reconfigure_sim(scn)
-        # sim.drive_and_show()
+    #     sim.drive_and_show()
     # obs = sim.sim.step('turn_left')
     # plt.imshow(obs['color_sensor'])
     # plt.show()

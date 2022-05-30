@@ -21,7 +21,7 @@ def get_args():
                         help='0: Train, 1: Evaluate (default: 0)')
     parser.add_argument('--num_training_frames', type=int, default=10000000,
                         help='total number of training frames')
-    parser.add_argument('--num_eval_episodes', type=int, default=10000,
+    parser.add_argument('--num_eval_episodes', type=int, default=200,
                         help="number of test episodes per scene")
     parser.add_argument('--num_train_episodes', type=int, default=10000,
                         help="""number of train episodes per scene
@@ -67,7 +67,7 @@ def get_args():
                         help='Frame width (default:160)')
     parser.add_argument('-fh', '--frame_height', type=int, default=480,
                         help='Frame height (default:120)')
-    parser.add_argument('-el', '--max_episode_length', type=int, default=500,
+    parser.add_argument('-el', '--max_episode_length', type=int, default=250,
                         help="""Maximum episode length""")
     parser.add_argument("--task_config", type=str,
                         default="/tasks/challenge_objectnav2022.local.rgbd.yaml",
@@ -147,7 +147,7 @@ def get_args():
     parser.add_argument('--cat_pred_threshold', type=float, default=10.0)
     parser.add_argument('--map_pred_threshold', type=float, default=1.0)
     parser.add_argument('--exp_pred_threshold', type=float, default=1.0)
-    parser.add_argument('--collision_threshold', type=float, default=0.1)
+    parser.add_argument('--collision_threshold', type=float, default=0.2)
 
     # parse arguments
     args = parser.parse_args()

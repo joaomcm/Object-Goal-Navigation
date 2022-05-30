@@ -368,6 +368,7 @@ def main():
                 dist = infos[e]['distance_to_goal']
                 spl_per_category[infos[e]['goal_name']].append(spl)
                 success_per_category[infos[e]['goal_name']].append(success)
+                print(infos[e]['sensor_pose'])
                 if args.eval:
                     episode_success[e].append(success)
                     episode_spl[e].append(spl)
@@ -389,7 +390,7 @@ def main():
             [infos[env_idx]['sensor_pose'] for env_idx
              in range(num_scenes)])
         ).float().to(device)
-
+        # print('\n\n THIS IS THE SHAPE OF OBS: {} and the type of OBS: {}\n\n\n'.format(obs.shape,type(obs)))
         _, local_map, _, local_pose = \
             sem_map_module(obs, poses, local_map, local_pose)
 

@@ -16,7 +16,7 @@ from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.utils.visualizer import ColorMode, Visualizer
 import detectron2.data.transforms as T
 import pickle
-from constants import coco_categories_mapping
+from ...constants import coco_categories_mapping
 
 
 class SemanticPredMaskRCNN():

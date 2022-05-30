@@ -3,9 +3,9 @@ import torch.nn as nn
 from torch.nn import functional as F
 import numpy as np
 
-from utils.distributions import Categorical, DiagGaussian
-from utils.model import get_grid, ChannelPool, Flatten, NNBase
-import envs.utils.depth_utils as du
+from .utils.distributions import Categorical, DiagGaussian
+from .utils.model import get_grid, ChannelPool, Flatten, NNBase
+from  .envs.utils import depth_utils as du
 import pdb
 
 class Goal_Oriented_Semantic_Policy(NNBase):
@@ -178,7 +178,7 @@ class Semantic_Mapping(nn.Module):
     def forward(self, obs, pose_obs, maps_last, poses_last):
         bs, c, h, w = obs.size()
         depth = obs[:, 3, :, :]
-        depth_mask = depth.isnan()
+        # depth_mask = depth.isnan()
         point_cloud_t = du.get_point_cloud_from_z_t(
             depth, self.camera_matrix, self.device, scale=self.du_scale)
 
@@ -211,12 +211,12 @@ class Semantic_Mapping(nn.Module):
         XYZ_cm_std = XYZ_cm_std.view(XYZ_cm_std.shape[0],
                                      XYZ_cm_std.shape[1],
                                      XYZ_cm_std.shape[2] * XYZ_cm_std.shape[3])
-        # pdb.set_trace()
-        XYZ_cm_std = XYZ_cm_std[:,:,~depth_mask.flatten()]
-        # pdb.set_trace()
-        input_feat = self.feat[:,:,~depth_mask.flatten()]
+        # # pdb.set_trace()
+        # XYZ_cm_std = XYZ_cm_std[:,:,~depth_mask.flatten()]
+        # # pdb.set_trace()
+        # input_feat = self.feat[:,:,~depth_mask.flatten()]
         voxels = du.splat_feat_nd(
-            self.init_grid * 0., input_feat, XYZ_cm_std).transpose(2, 3)
+            self.init_grid * 0., self.feat, XYZ_cm_std).transpose(2, 3)
 
         min_z = int(25 / z_resolution - min_h)
         max_z = int((self.agent_height + 1) / z_resolution - min_h)

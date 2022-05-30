@@ -8,9 +8,9 @@ import quaternion
 import skimage.morphology
 import habitat
 
-from envs.utils.fmm_planner import FMMPlanner
-from constants import coco_categories
-import envs.utils.pose as pu
+from ..utils.fmm_planner import FMMPlanner
+from ...constants import coco_categories
+from ..utils import pose as pu
 import pdb
 
 class ObjectGoal_Env(habitat.RLEnv):
@@ -28,7 +28,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         config_env.ENVIRONMENT.ITERATOR_OPTIONS.SHUFFLE = True
         config_env.ENVIRONMENT.ITERATOR_OPTIONS.GROUP_BY_SCENE = False
         config_env.freeze()
-        print('\n\n\n THIS IS THE CONFIG ENV {}\n\n\n\n\n\n\n'.format(config_env.ENVIRONMENT))
+        # print('\n\n\n THIS IS THE CONFIG ENV {}\n\n\n\n\n\n\n'.format(config_env.ENVIRONMENT))
         super().__init__(config_env, dataset)
         
         # Loading dataset info file
@@ -48,7 +48,7 @@ class ObjectGoal_Env(habitat.RLEnv):
                                                 (3, args.frame_height,
                                                  args.frame_width),
                                                 dtype='uint8')
-        print(dir(self))
+        # print(dir(self))
         # self.habitat_env.episode_iterator = self.dataset.get_episode_iterator()
         # self.habitat_env.episode_iterator._forced_scene_switch()
         # self.episode_iterator = self.habitat_env.episode_iterator
@@ -95,13 +95,13 @@ class ObjectGoal_Env(habitat.RLEnv):
         """
         if(self.episode_no != 0):
             # self.habitat_env.episode_iterator._forced_scene_switch()
-            print('IT REACHES THE FIRST RESET')
+            # print('IT REACHES THE FIRST RESET')
             super().reset()
             self.habitat_env.task.reset(self.habitat_env.current_episode)
         # args = self.args
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
         scene_name = self.scene_path.split("/")[-1].split(".")[0]
-        print('this scene is now this : {}'.format(scene_name))
+        # print('this scene is now this : {}'.format(scene_name))
         # if self.scene_path != self.last_scene_path:
         #     episodes_file = self.episodes_dir + \
         #         "content/{}_episodes.json.gz".format(scene_name)
@@ -118,7 +118,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         # episode = self.dataset.episodes[self.eps_data_idx]
         # episode = next(self.episode_iterator)
         episode = self.habitat_env.current_episode
-        print('\n\nthis is the scene id {} and the episode_id {} and the category is {}\n\n'.format(episode.scene_id,episode.episode_id,episode.object_category))
+        # print('\n\nthis is the scene id {} and the episode_id {} and the category is {}\n\n'.format(episode.scene_id,episode.episode_id,episode.object_category))
         self.eps_data_idx += 1
         self.eps_data_idx = self.eps_data_idx % len(self.dataset.episodes)
         # pos = episode.start_position
@@ -172,7 +172,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         # print(self.sim_continuous_to_sim_map(self.get_sim_location()))
         # print('WE GET TO THE POINT OF GENERATING THE NEW OBSERVATIONS')
         obs = self._env.sim.get_observations_at(pos, rot)
-        print('WE PASS THE POINT OF GETTING NEW OBSERVATIONS')
+        # print('WE PASS THE POINT OF GETTING NEW OBSERVATIONS')
         # print(obs)
         return obs
 
@@ -343,7 +343,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         #     print("Changing scene: {}/{}".format(self.rank, self.scene_name))
 
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
-        print('\n\n\n\n\n\n THIS IS THE REGISTERED SCENE NAME {}'.format(self.scene_name))
+        # print('\n\n\n\n\n\n THIS IS THE REGISTERED SCENE NAME {}'.format(self.scene_name))
         # if self.split == "val":
         #     obs = self.load_new_episode()
         # else:
@@ -440,7 +440,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         #     success = 0
         # spl = min(success * self.starting_distance / self.path_length, 1)
         metrics = self.habitat_env.get_metrics()
-        print(metrics)
+        # print(metrics)
         spl = metrics['softspl']
         # success = int(metrics['success'])
         dist = metrics['distance_to_goal']

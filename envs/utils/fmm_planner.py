@@ -106,16 +106,16 @@ class FMMPlanner():
         ratio1 = subset / dist_mask
         subset[ratio1 < -1.5] = 1
         # print('previous state = {},state = {}'.format(self.previous_state,curr_loc))
-        if(not np.all(curr_loc==self.previous_state)):
-            (stg_x, stg_y) = np.unravel_index(np.argmin(subset), subset.shape)
-            self.previous_state = curr_loc
-        else:
-            argsorted = np.argsort(subset.flatten())
-            chosen = np.random.choice(argsorted)
-            # print(np.sort(subset.flatten())[:30])
-            (stg_x, stg_y) = np.unravel_index(chosen, subset.shape)
-            self.previous_state = curr_loc
-            # pdb.set_trace()
+        # if(not np.all(curr_loc==self.previous_state)):
+        (stg_x, stg_y) = np.unravel_index(np.argmin(subset), subset.shape)
+        self.previous_state = curr_loc
+        # else:
+        #     argsorted = np.argsort(subset.flatten())
+        #     chosen = np.random.choice(argsorted)
+        #     # print(np.sort(subset.flatten())[:30])
+        #     (stg_x, stg_y) = np.unravel_index(chosen, subset.shape)
+        #     self.previous_state = curr_loc
+        #     # pdb.set_trace()
 
         if subset[stg_x, stg_y] > -0.0001:
             replan = True
